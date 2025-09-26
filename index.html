@@ -109,6 +109,13 @@
             <!-- Detalhe mais discreto para o ID do Usuário -->
             <div id="user-info" class="mt-2 text-xs text-gray-500 text-center md:text-left pt-2 border-t border-gray-100"></div>
 
+            <!-- MENSAGEM DE MODO ESTATICO (VISÍVEL SOMENTE QUANDO ATIVO) -->
+            <div id="static-mode-warning" class="hidden mt-4 p-3 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-lg font-medium text-sm">
+                <p>⚠️ **ATENÇÃO:** O sistema está no **MODO ESTATICO**. Agendamentos **NÃO SERÃO SALVOS** no banco de dados.</p>
+                <p class="mt-1 text-xs">Para salvar, acesse o aplicativo no ambiente de edição (Canvas).</p>
+            </div>
+
+
             <!-- Botão do Painel Administrativo -->
             <div class="mt-4 text-center md:text-left">
                 <button id="admin-panel-toggle" class="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 transition duration-150 shadow-md">
@@ -298,18 +305,24 @@
 
         async function setupFirebase() {
             try {
+                const configMissing = Object.keys(firebaseConfig).length === 0 || !firebaseConfig.apiKey;
+
                 // Se a configuração do Firebase estiver incompleta (fora do Canvas)
-                if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.apiKey) {
+                if (configMissing) {
                     console.warn("Aviso: Configurações do Firebase ausentes. Entrando no Modo Estático.");
                     isStaticMode = true; 
                     userId = 'VISUALIZADOR_ESTATICO'; 
+                    
+                    // Exibe o aviso de modo estático
+                    document.getElementById('static-mode-warning').classList.remove('hidden');
+
                     document.getElementById('user-info').textContent = `ID do Usuário: ${userId} (Modo Estático: Agendamentos NÃO SÃO SALVOS)`;
                     
                     // Garante a renderização da interface e oculta o spinner
                     renderApp(); 
 
                     // Mensagens específicas do Modo Estático
-                    document.getElementById('appointments-list').innerHTML = '<p class="text-orange-500 font-semibold">O sistema de agendamento está em MODO ESTATICO. Agendamentos não serão salvos/carregados.</p>';
+                    document.getElementById('appointments-list').innerHTML = '<p class="text-orange-500 font-semibold">O sistema de agendamento está em MODO ESTATICO. Agendamentos NÃO serão salvos/carregados.</p>';
                     document.getElementById('all-appointments-list').innerHTML = '<p class="text-orange-500 font-semibold">O painel está em MODO ESTATICO. Nenhum agendamento do banco de dados pode ser carregado.</p>';
                     
                     // Desabilita botões de agendamento 
@@ -536,7 +549,7 @@
             const name = document.getElementById('client-name').value;
             const contact = document.getElementById('client-contact').value;
             
-            // Só habilita se NÃO estiver em Modo Estático
+            // Habilita apenas se houver todas as seleções E NÃO estiver em Modo Estático
             const isReady = selectedService && selectedDate && selectedTime && name && contact && !isStaticMode;
             
             bookButton.disabled = !isReady;
@@ -692,8 +705,8 @@ Contato: ${contact}`
                 formMessage.textContent = "Ocorreu um erro ao agendar. Tente novamente.";
                 formMessage.classList.add('text-red-500');
             } finally {
-                bookButton.disabled = false;
-                bookButton.textContent = 'Confirmar Agendamento e Abrir WhatsApp';
+                // Aqui garantimos que o botão mostre a mensagem correta após a tentativa
+                checkFormCompletion();
             }
         });
 
