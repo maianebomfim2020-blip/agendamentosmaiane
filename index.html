@@ -227,10 +227,26 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, query, where, addDoc, onSnapshot, serverTimestamp, setLogLevel, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        /**
+         * FUNÇÃO DE SEGURANÇA PARA OBTER CONFIGURAÇÃO EXTERNA
+         */
+        function getFirebaseConfig() {
+            // Verifica se a variável global existe e não está nula
+            if (typeof __firebase_config === 'undefined' || !__firebase_config) {
+                return {}; // Retorna objeto vazio se não estiver no ambiente correto
+            }
+            try {
+                // Tenta parsear, mas falha se for uma string inválida
+                return JSON.parse(__firebase_config);
+            } catch (e) {
+                console.error("Erro ao fazer parse da configuração do Firebase (JSON inválido).", e);
+                return {};
+            }
+        }
+        
         // Variáveis Globais (Fornecidas pelo ambiente - Usando valores padrão para Modo Estático)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'maiane-app-static'; // ID Padrão
-        // Configuração do Firebase: Vazia se estiver rodando fora do Canvas
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const firebaseConfig = getFirebaseConfig();
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         // Configurações e Instâncias
@@ -241,7 +257,7 @@
         let isStaticMode = false; // Novo flag para Modo Estático
 
         // ADMIN CONFIG
-        const ADMIN_PASSWORD = '123';
+        const ADMIN_PASSWORD = '123'; // Lembre-se de mudar a senha em um ambiente real
         let isAdminLoggedIn = false;
 
         // Telefone da Maiane para o WhatsApp
@@ -285,17 +301,18 @@
                 // Se a configuração do Firebase estiver incompleta (fora do Canvas)
                 if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.apiKey) {
                     console.warn("Aviso: Configurações do Firebase ausentes. Entrando no Modo Estático.");
-                    isStaticMode = true;
-                    // Define um userId temporário para visualização
+                    isStaticMode = true; 
                     userId = 'VISUALIZADOR_ESTATICO'; 
                     document.getElementById('user-info').textContent = `ID do Usuário: ${userId} (Modo Estático: Agendamentos NÃO SÃO SALVOS)`;
-                    // Renderiza a interface imediatamente
+                    
+                    // Garante a renderização da interface e oculta o spinner
                     renderApp(); 
-                    // Limpa as listas de agendamento para evitar confusão no Modo Estático
+
+                    // Mensagens específicas do Modo Estático
                     document.getElementById('appointments-list').innerHTML = '<p class="text-orange-500 font-semibold">O sistema de agendamento está em MODO ESTATICO. Agendamentos não serão salvos/carregados.</p>';
                     document.getElementById('all-appointments-list').innerHTML = '<p class="text-orange-500 font-semibold">O painel está em MODO ESTATICO. Nenhum agendamento do banco de dados pode ser carregado.</p>';
                     
-                    // Desabilita botões de agendamento e painel
+                    // Desabilita botões de agendamento 
                     document.getElementById('book-button').disabled = true;
                     document.getElementById('book-button').textContent = 'Agendamento Desativado (Modo Estático)';
                     return;
@@ -325,8 +342,8 @@
                 });
 
             } catch (error) {
-                console.error("Erro ao inicializar Firebase (configuração incorreta):", error);
-                document.getElementById('loading').innerHTML = `<p class="text-red-500 font-bold">ERRO FATAL: O Firebase não pôde ser iniciado. O sistema de agendamento está desativado.</p>`;
+                console.error("Erro ao inicializar Firebase (configuração incorreta ou falha de rede):", error);
+                document.getElementById('loading').innerHTML = `<p class="text-red-500 font-bold">ERRO FATAL: O Firebase não pôde ser iniciado. O sistema de agendamento está desativado. Verifique o console.</p>`;
             }
         }
 
@@ -387,7 +404,8 @@
          */
 
         function renderApp() {
-            document.getElementById('loading').classList.add('hidden');
+            // Garante que o spinner de carregamento seja SEMPRE ocultado
+            document.getElementById('loading').classList.add('hidden'); 
             document.getElementById('booking-flow').classList.remove('hidden');
             renderServices();
             setupDateInput();
@@ -536,7 +554,8 @@
         
         async function updateAppointmentStatus(docId, status, buttonEl) {
             if (isStaticMode) {
-                alertUserMessage('Ação desativada: O sistema de banco de dados (Firestore) não está conectado.', 'error');
+                // Usando console.log em vez de alert
+                console.log('Ação desativada: O sistema de banco de dados (Firestore) não está conectado.'); 
                 return;
             }
             if (!db || !docId) return;
