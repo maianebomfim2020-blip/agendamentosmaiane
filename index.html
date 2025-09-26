@@ -344,6 +344,7 @@
                         if (initialAuthToken) {
                             await signInWithCustomToken(auth, initialAuthToken);
                         } else {
+                            // Se não houver token, autentica anonimamente
                             await signInAnonymously(auth);
                         }
                     }
@@ -363,6 +364,7 @@
         // Esta função só será chamada se estivermos NO MODO Firebase (não estático)
         function getAppointmentsCollectionRef() {
             if (isStaticMode) return null; // Evita erro no modo estático
+            // Usando a estrutura de coleção pública para agendamentos
             return collection(db, `artifacts/${appId}/public/data/appointments`);
         }
 
@@ -567,7 +569,6 @@
         
         async function updateAppointmentStatus(docId, status, buttonEl) {
             if (isStaticMode) {
-                // Usando console.log em vez de alert
                 console.log('Ação desativada: O sistema de banco de dados (Firestore) não está conectado.'); 
                 return;
             }
@@ -615,8 +616,28 @@ Por favor, me informe as novas datas e horários disponíveis.
 
 
         /**
-         * LÓGICA DE FORMULÁRIO E FIREBASE
+         * LÓGICA DE FORMULÁRIO E FIREBASE (COMPLETADO A PARTIR DESTE PONTO)
          */
+        
+        // Função para abrir o WhatsApp após o agendamento
+        function openWhatsAppConfirmation(booking) {
+            const dateParts = booking.date.split('-'); // YYYY-MM-DD
+            const date = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+            const formattedDate = date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+
+            const message = encodeURIComponent(
+                `Olá Maiane, acabei de agendar um serviço!
+*Cliente:* ${booking.clientName}
+*Serviço:* ${booking.service} (${formatCurrency(booking.price)})
+*Data:* ${formattedDate}
+*Horário:* ${booking.time}
+*Contato:* ${booking.clientContact}
+
+Por favor, confirme a disponibilidade. 😊`
+            );
+            const whatsappUrl = `https://wa.me/${MAIANE_WHATSAPP_NUMBER}?text=${message}`;
+            window.open(whatsappUrl, '_blank');
+        }
 
         document.getElementById('booking-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -640,371 +661,344 @@ Por favor, me informe as novas datas e horários disponíveis.
 
             bookButton.disabled = true;
             bookButton.textContent = 'Agendando no Firestore...';
+            formMessage.classList.remove('text-red-500', 'text-green-600');
             formMessage.textContent = '';
-            formMessage.classList.remove('text-red-500', 'text-green-500');
+
 
             try {
-                const appointmentData = {
-                    userId: userId,
-                    serviceId: selectedService.id,
-                    serviceName: selectedService.name,
+                const newBooking = {
                     clientName: name,
                     clientContact: contact,
-                    date: selectedDate, // Formato YYYY-MM-DD
-                    time: selectedTime, // Formato HH:MM
+                    serviceId: selectedService.id,
+                    service: selectedService.name,
+                    price: selectedService.numericPrice,
+                    date: selectedDate, // YYYY-MM-DD
+                    time: selectedTime,
                     timestamp: serverTimestamp(),
-                    status: 'Pendente'
+                    userId: userId, // Para o cliente ver seus próprios agendamentos
+                    status: 'Agendado' // Padrão
                 };
 
-                await addDoc(getAppointmentsCollectionRef(), appointmentData);
-                
-                const dateObj = new Date(selectedDate + 'T00:00:00'); 
-                const dateDisplayFull = dateObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
-                const finalDateDisplay = `o dia ${dateDisplayFull.replace('de ', '')}`; 
-                
-                let timePeriod = '';
-                const hour = parseInt(selectedTime.split(':')[0], 10);
-                if (hour >= 6 && hour < 12) timePeriod = 'da manhã';
-                else if (hour >= 12 && hour < 18) timePeriod = 'da tarde';
-                else timePeriod = 'da noite';
-                
-                const whatsappMessage = encodeURIComponent(
-                    `*NOVO AGENDAMENTO - MAIANE MANICURE*
+                const appointmentsRef = getAppointmentsCollectionRef();
+                if (appointmentsRef) {
+                    await addDoc(appointmentsRef, newBooking);
+                    
+                    // Sucesso: Abre o WhatsApp
+                    openWhatsAppConfirmation(newBooking);
 
-Serviço: ${selectedService.name}
-Preço: ${selectedService.price}
-Duração Estimada: ${selectedService.duration} minutos
+                    // Limpa o formulário e reabilita o botão
+                    document.getElementById('booking-form').reset();
+                    document.getElementById('client-name').value = '';
+                    document.getElementById('client-contact').value = '';
+                    selectedService = null;
+                    selectedDate = null;
+                    selectedTime = null;
+                    renderTimeSlots(); // Limpa os slots
+                    document.getElementById('date-time-section').style.display = 'none';
+                    document.getElementById('client-info-section').style.display = 'none';
 
-Data: ${finalDateDisplay}
-Hora: ${selectedTime} ${timePeriod}
+                    formMessage.textContent = '✅ Agendamento realizado com sucesso! Verifique o WhatsApp.';
+                    formMessage.classList.add('text-green-600');
+                    formMessage.classList.remove('text-red-500');
+                    
+                    // Desmarca o serviço visualmente
+                    document.querySelectorAll('.service-card').forEach(btn => {
+                        btn.classList.remove('ring-4', 'ring-maiane-pink/50', 'shadow-inner', 'border-maiane-dark-pink', 'bg-maiane-pink/10');
+                        btn.classList.add('bg-white', 'border-gray-300');
+                    });
+                    document.getElementById('service-description-display').classList.add('hidden');
 
-Cliente: ${name}
-Contato: ${contact}`
-                );
-
-                const whatsappUrl = `https://wa.me/${MAIANE_WHATSAPP_NUMBER}?text=${whatsappMessage}`;
-
-                formMessage.textContent = `Sucesso! Agendamento de "${selectedService.name}" confirmado. Você será redirecionado para o WhatsApp de Maiane Manicure.`;
-                formMessage.classList.add('text-green-500');
-
-                setTimeout(() => {
-                    window.open(whatsappUrl, '_blank');
-                }, 1000); 
-
-                document.getElementById('client-name').value = '';
-                document.getElementById('client-contact').value = '';
-                selectedService = null;
-                selectedDate = null;
-                selectedTime = null;
-                document.getElementById('service-description-display').classList.add('opacity-0', 'hidden');
-
-                renderApp();
+                } else {
+                    // Deveria ter sido capturado pelo isStaticMode = true
+                    throw new Error("Referência do Firestore indisponível."); 
+                }
 
             } catch (error) {
-                console.error("Erro ao salvar o agendamento no Firestore:", error);
-                formMessage.textContent = "Ocorreu um erro ao agendar. Tente novamente.";
+                console.error("Erro ao salvar agendamento:", error);
+                formMessage.textContent = `❌ Erro ao agendar. Tente novamente ou entre em contato direto. Detalhes: ${error.message}`;
                 formMessage.classList.add('text-red-500');
+                formMessage.classList.remove('text-green-600');
             } finally {
-                // Aqui garantimos que o botão mostre a mensagem correta após a tentativa
-                checkFormCompletion();
+                bookButton.disabled = false;
+                checkFormCompletion(); // Restaura o texto do botão baseado no estado
             }
         });
 
-        document.getElementById('client-name').addEventListener('input', checkFormCompletion);
-        document.getElementById('client-contact').addEventListener('input', checkFormCompletion);
-
-        /**
-         * LISTENER DE AGENDAMENTOS (CLIENTE)
-         */
-
-        function listenForAppointments() {
-            if (isStaticMode) return;
-            
-            const q = query(
-                getAppointmentsCollectionRef(),
-                where("userId", "==", userId)
-            );
-
-            onSnapshot(q, (snapshot) => {
-                const listEl = document.getElementById('appointments-list');
-                listEl.innerHTML = '';
-                
-                if (snapshot.empty) {
-                    listEl.innerHTML = '<p class="text-gray-500">Nenhum agendamento encontrado.</p>';
-                    return;
-                }
-
-                snapshot.docs.forEach(doc => {
-                    const data = doc.data();
-                    const dateObj = new Date(data.date + 'T00:00:00'); 
-                    const dateDisplay = dateObj.toLocaleDateString('pt-BR', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-
-                    const isCanceled = data.status === 'Cancelado';
-                    const isPending = data.status === 'Pendente';
-                    const isCompleted = data.status === 'Concluído';
-
-                    const item = document.createElement('div');
-                    item.classList.add('p-3', 'border', 'border-gray-200', 'rounded-lg', 'bg-white', 'shadow-sm', 'flex', 'justify-between', 'items-center');
-                    if (isCanceled || isCompleted) {
-                        item.classList.add('opacity-60');
-                    }
-                    
-                    let statusClass = 'bg-gray-500';
-                    if (isPending) statusClass = 'bg-orange-500';
-                    if (isCanceled) statusClass = 'bg-red-500';
-                    if (isCompleted) statusClass = 'bg-green-500';
-
-                    item.innerHTML = `
-                        <div>
-                            <p class="font-bold text-gray-800">${data.serviceName}</p>
-                            <p class="text-sm text-gray-600">
-                                <span class="font-semibold text-maiane-dark-pink">${dateDisplay}</span> às <span class="font-semibold text-maiane-dark-pink">${data.time}</span>
-                            </p>
-                            <p class="text-xs text-gray-500">Cliente: ${data.clientName} | Contato: ${data.clientContact}</p>
-                        </div>
-                        <div class="flex flex-col space-y-1 items-end">
-                            <span class="text-xs font-semibold px-2 py-1 rounded-full text-white ${statusClass}">
-                                ${data.status}
-                            </span>
-                            ${isPending ? `
-                                <div class="flex flex-col space-y-1 mt-1 text-right">
-                                    <button data-id="${doc.id}" data-action="cancel" class="action-btn-cancel text-xs font-medium text-red-600 hover:text-red-800 transition duration-150 p-1 rounded hover:bg-red-50 leading-none">Cancelar</button>
-                                    <button data-id="${doc.id}" data-action="reschedule" data-details='${JSON.stringify({service: data.serviceName, date: dateDisplay, time: data.time})}' class="action-btn-reschedule text-xs font-medium text-blue-600 hover:text-blue-800 transition duration-150 p-1 rounded hover:bg-blue-50 leading-none">Reagendar</button>
-                                </div>
-                            ` : ''}
-                        </div>
-                    `;
-                    listEl.appendChild(item);
-                });
-                
-                listEl.querySelectorAll('.action-btn-cancel').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const docId = e.currentTarget.dataset.id;
-                        cancelAppointment(docId, e.currentTarget);
-                    });
-                });
-
-                listEl.querySelectorAll('.action-btn-reschedule').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const details = JSON.parse(e.currentTarget.dataset.details);
-                        rescheduleAppointment(details);
-                    });
-                });
-
-            }, (error) => {
-                console.error("Erro ao ouvir agendamentos:", error);
-                document.getElementById('appointments-list').innerHTML = '<p class="text-red-500">Erro ao carregar sua lista de agendamentos.</p>';
-            });
-        }
         
         /**
-         * LISTENER PARA TODOS OS AGENDAMENTOS (ADMIN) E LÓGICA DE RELATÓRIO
+         * LISTENERS DO FIREBASE (CLIENTE)
          */
+        
+        function listenForAppointments() {
+            if (isStaticMode || !db) return;
 
-        function listenForAllAppointments() {
-            if (isStaticMode) return;
-            if (!db) return;
-
-            const q = query(getAppointmentsCollectionRef());
+            const appointmentsRef = getAppointmentsCollectionRef();
+            // Filtra agendamentos APENAS para o usuário logado
+            const q = query(appointmentsRef, where("userId", "==", userId));
 
             onSnapshot(q, (snapshot) => {
-                if (!isAdminLoggedIn) return; // Não renderiza se o admin não estiver logado
-
-                const allAppointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                
-                // 1. Renderiza a lista de agendamentos
-                renderAdminAppointmentsList(allAppointments);
-                
-                // 2. Filtra e calcula o relatório
-                const completedAppointments = allAppointments.filter(app => app.status === 'Concluído');
-                renderProfitReport(completedAppointments);
-                
+                const appointments = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    // Adiciona o ID do documento para poder cancelar/reagendar
+                    appointments.push({ id: doc.id, ...data });
+                });
+                renderAppointmentList(appointments);
             }, (error) => {
-                console.error("Erro ao ouvir TODOS os agendamentos:", error);
-                if (isAdminLoggedIn) {
-                    document.getElementById('all-appointments-list').innerHTML = '<p class="text-red-500">Erro ao carregar lista de agendamentos (Admin).</p>';
-                }
+                console.error("Erro ao ouvir agendamentos do cliente:", error);
+                document.getElementById('appointments-list').innerHTML = `<p class="text-red-500">Erro ao carregar seus agendamentos.</p>`;
             });
         }
 
-        // Função para calcular e renderizar o Relatório de Faturamento
-        function renderProfitReport(completedAppointments) {
-            const monthlyRevenue = {};
-            const annualRevenue = {};
-            let totalRevenue = 0;
+        function renderAppointmentList(appointments) {
+            const listEl = document.getElementById('appointments-list');
 
-            if (isStaticMode && completedAppointments.length === 0) {
-                 const reportEl = document.getElementById('profit-report-section');
-                 reportEl.innerHTML = `
-                    <div class="report-content-to-print">
-                        <h3 class="text-2xl font-bold mb-4 text-maiane-dark-pink border-b pb-2">Relatório de Faturamento</h3>
-                        <p class="text-lg text-orange-500 font-semibold mb-6">O sistema de relatórios está em MODO ESTATICO. Os dados exibidos são zerados ou de exemplo.</p>
-                        <div class="mb-6 p-4 bg-maiane-pink/20 rounded-lg border-2 border-maiane-pink/50">
-                            <p class="text-sm font-semibold text-maiane-dark-pink">Total de Receita Histórica (Concluídos)</p>
-                            <p class="text-3xl font-extrabold text-maiane-dark-pink">${formatCurrency(0)}</p>
-                        </div>
-                    </div>
-                 `;
-                 return;
-            }
-
-
-            completedAppointments.forEach(data => {
-                // A data está no formato YYYY-MM-DD
-                const appointmentDate = new Date(data.date + 'T00:00:00');
-                const year = appointmentDate.getFullYear();
-                const month = appointmentDate.getMonth(); // 0-11
-                const yearMonthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
-                
-                const price = SERVICE_PRICE_MAP[data.serviceId] || 0;
-                if (price === 0) {
-                    console.warn(`Preço não encontrado para serviceId: ${data.serviceId}. Ignorando agendamento no relatório.`);
-                    return;
-                }
-                
-                totalRevenue += price;
-
-                // Cálculo Mensal
-                monthlyRevenue[yearMonthKey] = (monthlyRevenue[yearMonthKey] || 0) + price;
-
-                // Cálculo Anual
-                annualRevenue[year] = (annualRevenue[year] || 0) + price;
-            });
-            
-            const reportEl = document.getElementById('profit-report-section');
-            let html = `
-                <div class="report-content-to-print">
-                    <h3 class="text-2xl font-bold mb-4 text-maiane-dark-pink border-b pb-2">Relatório de Faturamento</h3>
-                    
-                    <!-- Destaque Total Histórico -->
-                    <div class="mb-6 p-4 bg-maiane-pink/20 rounded-lg border-2 border-maiane-pink/50">
-                        <p class="text-sm font-semibold text-maiane-dark-pink">Total de Receita Histórica (Concluídos)</p>
-                        <p class="text-3xl font-extrabold text-maiane-dark-pink">${formatCurrency(totalRevenue)}</p>
-                    </div>
-
-                    <!-- Faturamento Anual (Visão Geral) -->
-                    <h4 class="text-lg font-bold mt-6 mb-3 text-gray-800">Faturamento Anual:</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        ${Object.keys(annualRevenue).sort().reverse().map(year => `
-                            <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
-                                <p class="text-base font-semibold text-gray-600">Ano ${year}</p>
-                                <p class="text-xl font-bold text-green-700">${formatCurrency(annualRevenue[year])}</p>
-                            </div>
-                        `).join('')}
-                        ${Object.keys(annualRevenue).length === 0 ? '<p class="text-gray-500 col-span-2">Nenhuma receita registrada ainda (marque agendamentos como "Concluído").</p>' : ''}
-                    </div>
-
-                    <!-- Faturamento Mensal (Detalhe) -->
-                    <h4 class="text-lg font-bold mt-8 mb-3 text-gray-800">Faturamento Mensal (Detalhado):</h4>
-                    <div class="space-y-2">
-                        ${Object.keys(monthlyRevenue).sort().reverse().map(yearMonth => {
-                            const [year, month] = yearMonth.split('-');
-                            const date = new Date(year, month - 1);
-                            const monthName = date.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
-                            return `
-                                <div class="flex justify-between items-center p-3 bg-white rounded-lg border border-gray-100 shadow-sm">
-                                    <span class="font-medium text-gray-700">${monthName.charAt(0).toUpperCase() + monthName.slice(1)}:</span>
-                                    <span class="font-bold text-lg text-green-700">${formatCurrency(monthlyRevenue[yearMonth])}</span>
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                </div>
-
-                <div class="mt-6 print-hide">
-                    <button id="export-report-btn" class="w-full md:w-auto px-6 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition duration-150 shadow-lg transform hover:scale-[1.01]">
-                        Imprimir/Exportar Relatório (PDF)
-                    </button>
-                </div>
-            `;
-
-            reportEl.innerHTML = html;
-            
-            // Adiciona o listener do botão de exportação
-            const exportButton = document.getElementById('export-report-btn');
-            if (exportButton) {
-                exportButton.addEventListener('click', printReport);
-            }
-        }
-
-        // Função para renderizar a lista de agendamentos do Admin
-        function renderAdminAppointmentsList(allAppointments) {
-            if (isStaticMode) return;
-            
-            const listEl = document.getElementById('all-appointments-list');
-            listEl.innerHTML = '';
-
-            if (allAppointments.length === 0) {
-                listEl.innerHTML = '<p class="text-gray-600">Nenhum agendamento encontrado.</p>';
+            if (appointments.length === 0) {
+                listEl.innerHTML = '<p class="text-gray-500">Você não possui agendamentos ativos.</p>';
                 return;
             }
 
-            allAppointments.forEach(data => {
-                const docId = data.id;
-                const dateObj = new Date(data.date + 'T00:00:00');
-                const dateDisplay = dateObj.toLocaleDateString('pt-BR', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+            // Ordena por data (mais próximos primeiro)
+            appointments.sort((a, b) => {
+                return new Date(`${a.date}T${a.time}:00`) - new Date(`${b.date}T${b.time}:00`);
+            });
 
-                const isCanceled = data.status === 'Cancelado';
-                const isCompleted = data.status === 'Concluído';
-                const isPending = data.status === 'Pendente';
+            listEl.innerHTML = appointments.map(appt => {
+                const isCanceled = appt.status === 'Cancelado';
+                const isCompleted = appt.status === 'Concluído';
+                const isPast = new Date(`${appt.date}T${appt.time}:00`) < new Date();
                 
-                let statusClass = 'bg-gray-500';
-                if (isPending) statusClass = 'bg-orange-500';
-                if (isCanceled) statusClass = 'bg-red-500';
-                if (isCompleted) statusClass = 'bg-green-500';
-
-                const item = document.createElement('div');
-                item.classList.add('p-4', 'border', 'border-gray-300', 'rounded-xl', 'bg-white', 'shadow-md', 'flex', 'flex-col', 'md:flex-row', 'justify-between', 'items-start', 'md:items-center', 'space-y-3', 'md:space-y-0');
-                
-                if (isCanceled || isCompleted) {
-                    item.classList.add('opacity-70');
+                let statusClasses = 'bg-gray-100 text-gray-700';
+                if (isCanceled) {
+                    statusClasses = 'bg-red-100 text-red-700 line-through';
+                } else if (isCompleted) {
+                    statusClasses = 'bg-green-100 text-green-700';
+                } else if (isPast) {
+                    statusClasses = 'bg-yellow-100 text-yellow-700';
+                } else {
+                    statusClasses = 'bg-maiane-light-pink text-maiane-dark-pink font-semibold';
                 }
 
-                item.innerHTML = `
-                    <div class="flex-1 w-full md:w-auto space-y-1">
-                        <p class="font-extrabold text-lg text-maiane-dark-pink">${data.serviceName} (${data.time})</p>
-                        <p class="text-sm text-gray-700">
-                            <span class="font-semibold">${dateDisplay}</span>
-                        </p>
-                        <p class="text-xs text-gray-500">Cliente: ${data.clientName} | Contato: ${data.clientContact}</p>
-                        <p class="text-xs text-gray-400">ID Cliente: ${data.userId}</p>
-                    </div>
+                // Desativa botões para agendamentos concluídos, cancelados ou passados
+                const buttonsDisabled = isCanceled || isCompleted || isPast;
 
-                    <div class="flex flex-col items-start md:items-end space-y-2 w-full md:w-auto print-hide">
-                        <span class="text-xs font-bold px-3 py-1 rounded-full text-white ${statusClass}">
-                            Status: ${data.status}
-                        </span>
-                        
-                        <div class="flex space-x-2">
-                            ${isPending ? `
-                                <button data-id="${docId}" data-status="Concluído" class="admin-action-btn px-3 py-1 text-xs font-semibold rounded-lg bg-green-500 text-white hover:bg-green-600 transition duration-150 transform hover:scale-105">Concluir</button>
-                                <button data-id="${docId}" data-status="Cancelado" class="admin-action-btn px-3 py-1 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition duration-150 transform hover:scale-105">Cancelar</button>
-                            ` : isCanceled ? `
-                                <p class="text-xs text-red-500 font-medium pt-1">Agendamento Cancelado</p>
-                            ` : isCompleted ? `
-                                <p class="text-xs text-green-700 font-medium pt-1">Serviço Concluído</p>
-                            ` : ''}
+                const dateParts = appt.date.split('-');
+                const formattedDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+                
+                return `
+                    <div class="appt-card p-4 border rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center ${isCanceled ? 'bg-red-50' : isCompleted ? 'bg-green-50' : 'bg-white'} shadow-sm">
+                        <div class="flex-1 mb-3 md:mb-0">
+                            <p class="text-lg font-bold text-gray-800">${appt.service}</p>
+                            <p class="text-sm text-gray-600">
+                                ${formattedDate} às <span class="font-semibold">${appt.time}</span> | ${formatCurrency(appt.price)}
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <span class="text-xs font-medium px-3 py-1 rounded-full ${statusClasses}">
+                                Status: ${appt.status} ${isPast && !isCanceled && !isCompleted ? '(Atrasado/Não Concluído)' : ''}
+                            </span>
+                            <button 
+                                data-id="${appt.id}" 
+                                data-service="${appt.service}"
+                                data-date="${appt.date}"
+                                data-time="${appt.time}"
+                                class="cancel-btn px-3 py-1 text-xs font-semibold rounded-lg bg-red-400 text-white hover:bg-red-500 transition duration-150 shadow-md disabled:opacity-50"
+                                ${buttonsDisabled ? 'disabled' : ''}
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                data-id="${appt.id}" 
+                                data-service="${appt.service}"
+                                data-date="${appt.date}"
+                                data-time="${appt.time}"
+                                class="reschedule-btn px-3 py-1 text-xs font-semibold rounded-lg bg-yellow-400 text-white hover:bg-yellow-500 transition duration-150 shadow-md disabled:opacity-50"
+                                ${buttonsDisabled ? 'disabled' : ''}
+                            >
+                                Reagendar (WhatsApp)
+                            </button>
                         </div>
                     </div>
                 `;
-                listEl.appendChild(item);
-            });
+            }).join('');
             
-            listEl.querySelectorAll('.admin-action-btn').forEach(btn => {
+            // Adiciona listeners para os botões de ação
+            listEl.querySelectorAll('.cancel-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    const docId = e.currentTarget.dataset.id;
-                    const newStatus = e.currentTarget.dataset.status;
-                    updateAppointmentStatus(docId, newStatus, e.currentTarget);
+                    if (confirm(`Tem certeza que deseja cancelar o agendamento de ${btn.dataset.service} em ${btn.dataset.date} às ${btn.dataset.time}?`)) {
+                        cancelAppointment(btn.dataset.id, btn);
+                    }
+                });
+            });
+
+            listEl.querySelectorAll('.reschedule-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    rescheduleAppointment({ 
+                        id: btn.dataset.id, 
+                        service: btn.dataset.service, 
+                        date: btn.dataset.date, 
+                        time: btn.dataset.time 
+                    });
                 });
             });
         }
-        
-        // Função para Imprimir/Exportar para PDF
-        function printReport() {
-            window.print();
+
+
+        /**
+         * LISTENERS DO FIREBASE (ADMIN)
+         */
+
+        function listenForAllAppointments() {
+            if (isStaticMode || !db || !isAdminLoggedIn) return;
+
+            const appointmentsRef = getAppointmentsCollectionRef();
+            // A query aqui não usa o where("userId", "==") pois é para todos
+            const q = query(appointmentsRef);
+
+            onSnapshot(q, (snapshot) => {
+                const appointments = [];
+                snapshot.forEach(doc => {
+                    appointments.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Ordena por data (mais recentes primeiro)
+                appointments.sort((a, b) => {
+                    return new Date(`${b.date}T${b.time}:00`) - new Date(`${a.date}T${a.time}:00`);
+                });
+                
+                renderAdminAppointmentList(appointments);
+                renderProfitReport(appointments);
+
+            }, (error) => {
+                console.error("Erro ao ouvir todos os agendamentos:", error);
+                document.getElementById('all-appointments-list').innerHTML = `<p class="text-red-500">Erro ao carregar todos os agendamentos.</p>`;
+            });
         }
 
-        // Inicia o setup
+        function renderAdminAppointmentList(appointments) {
+            const listEl = document.getElementById('all-appointments-list');
+
+            if (appointments.length === 0) {
+                listEl.innerHTML = '<p class="text-gray-500">Nenhum agendamento encontrado no banco de dados.</p>';
+                return;
+            }
+
+            listEl.innerHTML = appointments.map(appt => {
+                const isCanceled = appt.status === 'Cancelado';
+                const isCompleted = appt.status === 'Concluído';
+                
+                let statusColor = 'bg-gray-100 text-gray-700';
+                if (isCanceled) statusColor = 'bg-red-200 text-red-800';
+                else if (isCompleted) statusColor = 'bg-green-200 text-green-800';
+                else statusColor = 'bg-blue-100 text-blue-800 font-bold';
+
+                const dateParts = appt.date.split('-');
+                const formattedDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+                
+                return `
+                    <div class="appt-admin-card p-4 border rounded-xl flex flex-col lg:flex-row justify-between items-start lg:items-center ${isCanceled ? 'bg-red-50' : isCompleted ? 'bg-green-50' : 'bg-white'} shadow-md">
+                        <div class="flex-1 w-full lg:w-auto">
+                            <p class="text-base font-semibold text-maiane-dark-pink">${appt.service}</p>
+                            <p class="text-sm text-gray-600">
+                                ${appt.clientName} | ${appt.clientContact}
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap gap-2 items-center mt-2 lg:mt-0 lg:ml-4">
+                            <span class="text-xs font-medium px-2 py-0.5 rounded-full ${statusColor} min-w-[100px] text-center">
+                                ${appt.status}
+                            </span>
+                            <p class="text-sm font-bold text-gray-800 min-w-[110px] text-center">
+                                ${formattedDate} ${appt.time}
+                            </p>
+                            <p class="text-sm font-bold text-maiane-dark-pink min-w-[70px] text-center">
+                                ${formatCurrency(appt.price)}
+                            </p>
+                            <!-- Botões de Ação Admin -->
+                            <div class="flex gap-1 print-hide">
+                                <button 
+                                    data-id="${appt.id}" 
+                                    class="admin-complete-btn px-2 py-1 text-xs font-semibold rounded-lg bg-green-500 text-white hover:bg-green-600 transition disabled:opacity-30"
+                                    title="Marcar como Concluído"
+                                    ${isCompleted || isCanceled ? 'disabled' : ''}
+                                >
+                                    Concluir
+                                </button>
+                                <button 
+                                    data-id="${appt.id}" 
+                                    class="admin-cancel-btn px-2 py-1 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition disabled:opacity-30"
+                                    title="Cancelar Agendamento"
+                                    ${isCanceled || isCompleted ? 'disabled' : ''}
+                                >
+                                    X
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Adiciona listeners para os botões de ação do Admin
+            listEl.querySelectorAll('.admin-complete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    updateAppointmentStatus(btn.dataset.id, 'Concluído', btn);
+                });
+            });
+
+            listEl.querySelectorAll('.admin-cancel-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    if (confirm(`Tem certeza que deseja CANCELAR o agendamento?`)) {
+                        updateAppointmentStatus(btn.dataset.id, 'Cancelado', btn);
+                    }
+                });
+            });
+        }
+
+
+        function renderProfitReport(appointments) {
+            const reportEl = document.getElementById('profit-report-section');
+            
+            const completedAppointments = appointments.filter(a => a.status === 'Concluído');
+            const canceledAppointments = appointments.filter(a => a.status === 'Cancelado');
+
+            const totalRevenue = completedAppointments.reduce((sum, appt) => sum + (appt.price || 0), 0);
+            const totalCanceledValue = canceledAppointments.reduce((sum, appt) => sum + (appt.price || 0), 0);
+            
+            // Filtra os agendamentos que estão no futuro e não estão cancelados
+            const upcomingAppointments = appointments
+                .filter(a => a.status === 'Agendado' && new Date(`${a.date}T${a.time}:00`) >= new Date())
+                .reduce((sum, appt) => sum + (appt.price || 0), 0);
+
+
+            reportEl.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <!-- Faturamento Total -->
+                    <div class="p-4 bg-white rounded-lg shadow-lg border-b-4 border-green-500">
+                        <p class="text-sm font-medium text-gray-500">Faturamento Total (Concluídos)</p>
+                        <p class="text-2xl font-extrabold text-green-700 mt-1">${formatCurrency(totalRevenue)}</p>
+                    </div>
+                    <!-- Agendamentos Futuros -->
+                    <div class="p-4 bg-white rounded-lg shadow-lg border-b-4 border-blue-500">
+                        <p class="text-sm font-medium text-gray-500">Valor Estimado (Próximos)</p>
+                        <p class="text-2xl font-extrabold text-blue-700 mt-1">${formatCurrency(upcomingAppointments)}</p>
+                    </div>
+                    <!-- Valor Cancelado -->
+                    <div class="p-4 bg-white rounded-lg shadow-lg border-b-4 border-red-500">
+                        <p class="text-sm font-medium text-gray-500">Valor Perdido (Cancelados)</p>
+                        <p class="text-2xl font-extrabold text-red-700 mt-1">${formatCurrency(totalCanceledValue)}</p>
+                    </div>
+                </div>
+
+                <div class="text-right print-hide">
+                    <button onclick="window.print()" class="px-4 py-2 bg-gray-600 text-white text-sm font-semibold rounded-lg hover:bg-gray-700 transition duration-150 shadow-md">
+                        Imprimir Relatório
+                    </button>
+                </div>
+            `;
+        }
+
+        /**
+         * INICIALIZAÇÃO
+         */
         setupFirebase();
 
     </script>
