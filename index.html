@@ -210,7 +210,7 @@
             <form id="admin-login-form">
                 <div class="mb-4">
                     <label for="admin-password" class="block text-sm font-medium text-gray-700">Senha de Acesso:</label>
-                    <input type="password" id="admin-password" required class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maiane-pink/70 focus:border-maiane-pink transition duration-150 shadow-sm">
+                    <input type="password" id="admin-password" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maiane-pink/70 focus:border-maiane-pink transition duration-150 shadow-sm">
                 </div>
                 <p id="admin-login-message" class="text-red-500 text-sm mb-4 hidden">Senha incorreta. Tente novamente.</p>
                 <div class="flex justify-between space-x-3">
@@ -227,16 +227,18 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, query, where, addDoc, onSnapshot, serverTimestamp, setLogLevel, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Variáveis Globais (Fornecidas pelo ambiente)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // Variáveis Globais (Fornecidas pelo ambiente - Usando valores padrão para Modo Estático)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'maiane-app-static'; // ID Padrão
+        // Configuração do Firebase: Vazia se estiver rodando fora do Canvas
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         // Configurações e Instâncias
-        let app, db, auth, userId = null;
+        let app = null, db = null, auth = null, userId = null;
         let selectedService = null;
         let selectedDate = null;
         let selectedTime = null;
+        let isStaticMode = false; // Novo flag para Modo Estático
 
         // ADMIN CONFIG
         const ADMIN_PASSWORD = '123';
@@ -280,6 +282,26 @@
 
         async function setupFirebase() {
             try {
+                // Se a configuração do Firebase estiver incompleta (fora do Canvas)
+                if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.apiKey) {
+                    console.warn("Aviso: Configurações do Firebase ausentes. Entrando no Modo Estático.");
+                    isStaticMode = true;
+                    // Define um userId temporário para visualização
+                    userId = 'VISUALIZADOR_ESTATICO'; 
+                    document.getElementById('user-info').textContent = `ID do Usuário: ${userId} (Modo Estático: Agendamentos NÃO SÃO SALVOS)`;
+                    // Renderiza a interface imediatamente
+                    renderApp(); 
+                    // Limpa as listas de agendamento para evitar confusão no Modo Estático
+                    document.getElementById('appointments-list').innerHTML = '<p class="text-orange-500 font-semibold">O sistema de agendamento está em MODO ESTATICO. Agendamentos não serão salvos/carregados.</p>';
+                    document.getElementById('all-appointments-list').innerHTML = '<p class="text-orange-500 font-semibold">O painel está em MODO ESTATICO. Nenhum agendamento do banco de dados pode ser carregado.</p>';
+                    
+                    // Desabilita botões de agendamento e painel
+                    document.getElementById('book-button').disabled = true;
+                    document.getElementById('book-button').textContent = 'Agendamento Desativado (Modo Estático)';
+                    return;
+                }
+
+                // Inicia o modo normal com Firebase
                 setLogLevel('debug');
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
@@ -303,12 +325,14 @@
                 });
 
             } catch (error) {
-                console.error("Erro ao inicializar Firebase:", error);
-                document.getElementById('loading').innerHTML = `<p class="text-red-500">Erro ao carregar o sistema de agendamento. Verifique o console.</p>`;
+                console.error("Erro ao inicializar Firebase (configuração incorreta):", error);
+                document.getElementById('loading').innerHTML = `<p class="text-red-500 font-bold">ERRO FATAL: O Firebase não pôde ser iniciado. O sistema de agendamento está desativado.</p>`;
             }
         }
 
+        // Esta função só será chamada se estivermos NO MODO Firebase (não estático)
         function getAppointmentsCollectionRef() {
+            if (isStaticMode) return null; // Evita erro no modo estático
             return collection(db, `artifacts/${appId}/public/data/appointments`);
         }
 
@@ -339,7 +363,12 @@
                 isAdminLoggedIn = true;
                 hideAdminLogin();
                 renderAdminDashboard();
-                listenForAllAppointments();
+                if (!isStaticMode) {
+                    listenForAllAppointments();
+                } else {
+                    document.getElementById('all-appointments-list').innerHTML = '<p class="text-orange-500 font-semibold">O painel está em MODO ESTATICO. Nenhum agendamento do banco de dados pode ser carregado.</p>';
+                    renderProfitReport([]); // Renderiza o relatório zerado
+                }
             } else {
                 messageEl.textContent = "Senha incorreta. Tente novamente.";
                 messageEl.classList.remove('hidden');
@@ -488,10 +517,17 @@
             const bookButton = document.getElementById('book-button');
             const name = document.getElementById('client-name').value;
             const contact = document.getElementById('client-contact').value;
-
-            const isReady = selectedService && selectedDate && selectedTime && name && contact;
+            
+            // Só habilita se NÃO estiver em Modo Estático
+            const isReady = selectedService && selectedDate && selectedTime && name && contact && !isStaticMode;
+            
             bookButton.disabled = !isReady;
-            bookButton.textContent = isReady ? 'Confirmar Agendamento e Abrir WhatsApp' : 'Preencha todos os campos';
+            
+            if (isStaticMode) {
+                 bookButton.textContent = 'Agendamento Desativado (Modo Estático)';
+            } else {
+                bookButton.textContent = isReady ? 'Confirmar Agendamento e Abrir WhatsApp' : 'Preencha todos os campos';
+            }
         }
 
         /**
@@ -499,6 +535,10 @@
          */
         
         async function updateAppointmentStatus(docId, status, buttonEl) {
+            if (isStaticMode) {
+                alertUserMessage('Ação desativada: O sistema de banco de dados (Firestore) não está conectado.', 'error');
+                return;
+            }
             if (!db || !docId) return;
 
             const originalText = buttonEl.textContent;
@@ -553,6 +593,12 @@ Por favor, me informe as novas datas e horários disponíveis.
             const contact = document.getElementById('client-contact').value.trim();
             const formMessage = document.getElementById('form-message');
             const bookButton = document.getElementById('book-button');
+            
+            if (isStaticMode) {
+                formMessage.textContent = "O sistema de agendamento está em MODO ESTATICO. Agendamentos não podem ser salvos.";
+                formMessage.classList.add('text-red-500');
+                return;
+            }
 
             if (!selectedService || !selectedDate || !selectedTime || !name || !contact) {
                 formMessage.textContent = "Por favor, selecione o serviço, a data, o horário e preencha suas informações.";
@@ -640,6 +686,8 @@ Contato: ${contact}`
          */
 
         function listenForAppointments() {
+            if (isStaticMode) return;
+            
             const q = query(
                 getAppointmentsCollectionRef(),
                 where("userId", "==", userId)
@@ -650,7 +698,7 @@ Contato: ${contact}`
                 listEl.innerHTML = '';
                 
                 if (snapshot.empty) {
-                    listEl.innerHTML = '<p class="text-gray-500">Você ainda não tem agendamentos pendentes.</p>';
+                    listEl.innerHTML = '<p class="text-gray-500">Nenhum agendamento encontrado.</p>';
                     return;
                 }
 
@@ -722,6 +770,7 @@ Contato: ${contact}`
          */
 
         function listenForAllAppointments() {
+            if (isStaticMode) return;
             if (!db) return;
 
             const q = query(getAppointmentsCollectionRef());
@@ -751,6 +800,22 @@ Contato: ${contact}`
             const monthlyRevenue = {};
             const annualRevenue = {};
             let totalRevenue = 0;
+
+            if (isStaticMode && completedAppointments.length === 0) {
+                 const reportEl = document.getElementById('profit-report-section');
+                 reportEl.innerHTML = `
+                    <div class="report-content-to-print">
+                        <h3 class="text-2xl font-bold mb-4 text-maiane-dark-pink border-b pb-2">Relatório de Faturamento</h3>
+                        <p class="text-lg text-orange-500 font-semibold mb-6">O sistema de relatórios está em MODO ESTATICO. Os dados exibidos são zerados ou de exemplo.</p>
+                        <div class="mb-6 p-4 bg-maiane-pink/20 rounded-lg border-2 border-maiane-pink/50">
+                            <p class="text-sm font-semibold text-maiane-dark-pink">Total de Receita Histórica (Concluídos)</p>
+                            <p class="text-3xl font-extrabold text-maiane-dark-pink">${formatCurrency(0)}</p>
+                        </div>
+                    </div>
+                 `;
+                 return;
+            }
+
 
             completedAppointments.forEach(data => {
                 // A data está no formato YYYY-MM-DD
@@ -832,6 +897,8 @@ Contato: ${contact}`
 
         // Função para renderizar a lista de agendamentos do Admin
         function renderAdminAppointmentsList(allAppointments) {
+            if (isStaticMode) return;
+            
             const listEl = document.getElementById('all-appointments-list');
             listEl.innerHTML = '';
 
