@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maiane Manicure - Agendamento Online</title>
+    <!-- Configuração do Tailwind CSS com a cor Rosa Personalizada -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'maiane-pink': '#ff69b4', // Rosa Choque
+                        'maiane-dark-pink': '#e55a9e', // Rosa mais escuro para texto
+                        'maiane-light-pink': '#ffeef6', // Rosa muito claro para fundos
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Configuração de Fonte e Estilos Profissionais -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            background-color: #f7f9fb;
+        }
+        input[type="date"] {
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        .header-logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            text-align: left;
+        }
+        @media (min-width: 768px) {
+            .header-logo-container {
+                justify-content: flex-start;
+            }
+        }
+        .app-container-premium {
+            box-shadow: 0 10px 30px -5px rgba(255, 105, 180, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .app-container-premium:hover {
+            box-shadow: 0 15px 40px -8px rgba(255, 105, 180, 0.3), 0 6px 8px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Estilos específicos para a impressão do relatório */
+        @media print {
+            /* Esconde tudo que não é o relatório */
+            body > div:not(#app) {
+                display: none;
+            }
+            #app > :not(#admin-dashboard) {
+                display: none !important;
+            }
+            /* Garante que apenas a parte de relatório fique visível */
+            #admin-dashboard {
+                display: block !important;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                margin: 0;
+                padding: 20px;
+                box-shadow: none !important;
+                border: none !important;
+                background-color: white !important;
+            }
+            /* Esconde botões de ação na impressão */
+            #admin-dashboard .print-hide {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+    <div id="app" class="max-w-4xl mx-auto bg-white rounded-xl p-6 md:p-10 transition-shadow duration-300 app-container-premium">
+        
+        <!-- Título e Introdução -->
+        <header class="mb-8 p-4 rounded-lg bg-maiane-light-pink/50 shadow-sm print-hide">
+            <div class="header-logo-container">
+                <!-- Logo da Maiane Manicure -->
+                <img 
+                    src="perfil.jpg" 
+                    alt="Logo Maiane Manicure e Pedicure" 
+                    class="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-4 border-maiane-pink/50 shadow-md"
+                    onerror="this.onerror=null; this.src='https://placehold.co/80x80/ff69b4/ffffff?text=Logo'"
+                >
+                <!-- Título e Subtítulo -->
+                <div class="text-left">
+                    <h1 class="text-2xl md:text-3xl font-extrabold text-maiane-dark-pink leading-tight">
+                        Maiane Manicure
+                    </h1>
+                    <p class="text-sm md:text-base text-gray-600 font-semibold mt-0.5">
+                        Agende online - Rápido e fácil!
+                    </p>
+                </div>
+            </div>
+            
+            <p class="mt-4 text-gray-600 text-center md:text-left">Escolha o serviço desejado, selecione a data e o horário e preencha seus dados.</p>
+            <!-- Detalhe mais discreto para o ID do Usuário -->
+            <div id="user-info" class="mt-2 text-xs text-gray-500 text-center md:text-left pt-2 border-t border-gray-100"></div>
+
+            <!-- Botão do Painel Administrativo -->
+            <div class="mt-4 text-center md:text-left">
+                <button id="admin-panel-toggle" class="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 transition duration-150 shadow-md">
+                    Acessar Painel Administrativo
+                </button>
+            </div>
+        </header>
+
+        <!-- Etapas do Agendamento (Fluxo Normal) -->
+        <div id="loading" class="text-center py-10">
+            <div class="animate-pulse inline-block w-10 h-10 rounded-full bg-maiane-pink/80 flex items-center justify-center">
+                <div class="w-4 h-4 rounded-full bg-white"></div>
+            </div>
+            <p class="mt-3 text-lg text-maiane-dark-pink font-semibold">Carregando o sistema de agendamento...</p>
+        </div>
+
+        <div id="booking-flow" class="hidden print-hide">
+            <!-- 1. Seleção do Serviço -->
+            <section class="mb-8 p-4 border border-maiane-pink/30 bg-maiane-light-pink rounded-lg shadow-inner">
+                <h2 class="text-xl font-semibold mb-4 text-maiane-dark-pink">1. Selecione o Serviço</h2>
+                <p id="service-description-display" class="mb-4 p-3 bg-maiane-pink/20 text-maiane-dark-pink rounded-lg text-sm transition-opacity duration-300 opacity-0 hidden">
+                    <!-- Descrição será inserida aqui após a seleção -->
+                </p>
+                <div id="service-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Serviços serão injetados aqui -->
+                </div>
+            </section>
+
+            <!-- 2. Seleção de Data e Hora -->
+            <section class="mb-8 p-4 border border-pink-100 bg-pink-50 rounded-lg shadow-inner" id="date-time-section" style="display: none;">
+                <h2 class="text-xl font-semibold mb-4 text-maiane-dark-pink">2. Escolha a Data e Horário</h2>
+                <div class="flex flex-col md:flex-row gap-6">
+                    <div class="flex-1">
+                        <label for="booking-date" class="block text-sm font-medium text-gray-700 mb-2">Data:</label>
+                        <input type="date" id="booking-date" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maiane-pink/70 focus:border-maiane-pink transition duration-150 shadow-sm">
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Horários Disponíveis:</label>
+                        <div id="time-slots" class="grid grid-cols-3 gap-2">
+                            <p class="col-span-3 text-sm text-gray-500" id="time-placeholder">Selecione uma data para ver os horários.</p>
+                            <!-- Horários serão injetados aqui -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. Informações do Cliente -->
+            <section class="p-4 border border-rose-200 bg-rose-100 rounded-lg shadow-inner" id="client-info-section" style="display: none;">
+                <h2 class="text-xl font-semibold mb-4 text-maiane-dark-pink">3. Confirme Suas Informações</h2>
+                <form id="booking-form">
+                    <div class="mb-4">
+                        <label for="client-name" class="block text-sm font-medium text-gray-700">Nome Completo:</label>
+                        <input type="text" id="client-name" required class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maiane-pink/70 focus:border-maiane-pink transition duration-150 shadow-sm">
+                    </div>
+                    <div class="mb-6">
+                        <label for="client-contact" class="block text-sm font-medium text-gray-700">Contato (Telefone ou Email):</label>
+                        <input type="text" id="client-contact" required class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maiane-pink/70 focus:border-maiane-pink transition duration-150 shadow-sm">
+                    </div>
+
+                    <button type="submit" id="book-button" class="w-full bg-maiane-pink text-white font-bold py-3 rounded-lg hover:bg-maiane-dark-pink transition duration-200 shadow-xl hover:shadow-2xl disabled:opacity-50 disabled:shadow-md transform scale-100 hover:scale-[1.01] transition-transform duration-200" disabled>
+                        Confirmar Agendamento e Abrir WhatsApp
+                    </button>
+                    <p id="form-message" class="mt-3 text-center text-sm font-medium"></p>
+                </form>
+            </section>
+
+            <!-- Lista de Agendamentos (Cliente) -->
+            <section class="mt-10 pt-6 border-t border-gray-200">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Meus Agendamentos</h2>
+                <div id="appointments-list" class="space-y-3">
+                    <p class="text-gray-500">Nenhum agendamento encontrado.</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- ----------------------------------------------------- -->
+        <!-- DASHBOARD ADMINISTRATIVO (MAIANE) -->
+        <!-- ----------------------------------------------------- -->
+        <div id="admin-dashboard" class="hidden mt-10 p-6 bg-maiane-light-pink rounded-xl shadow-lg border border-maiane-pink/30">
+            <h2 class="text-3xl font-extrabold mb-6 text-maiane-dark-pink border-b pb-2 print-hide">Painel de Agendamentos (Admin)</h2>
+            
+            <!-- NOVO: RELATÓRIO DE FATURAMENTO -->
+            <section id="profit-report-section" class="mb-8"></section>
+
+            <!-- Lista de Agendamentos para Admin -->
+            <h3 class="text-xl font-semibold mb-4 text-gray-700">Agendamentos (Todos os Status)</h3>
+            <div id="all-appointments-list" class="space-y-4">
+                <p class="text-gray-600">Carregando todos os agendamentos...</p>
+            </div>
+            
+            <button id="admin-logout" class="mt-6 px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition duration-150 shadow-md print-hide">Sair do Painel Admin</button>
+        </div>
+    </div>
+
+    <!-- MODAL DE LOGIN ADMINISTRATIVO -->
+    <div id="admin-login-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden z-50 flex items-center justify-center print-hide">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full">
+            <h2 class="text-2xl font-bold mb-4 text-maiane-dark-pink">Acesso Restrito</h2>
+            <form id="admin-login-form">
+                <div class="mb-4">
+                    <label for="admin-password" class="block text-sm font-medium text-gray-700">Senha de Acesso:</label>
+                    <input type="password" id="admin-password" required class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maiane-pink/70 focus:border-maiane-pink transition duration-150 shadow-sm">
+                </div>
+                <p id="admin-login-message" class="text-red-500 text-sm mb-4 hidden">Senha incorreta. Tente novamente.</p>
+                <div class="flex justify-between space-x-3">
+                    <button type="button" id="admin-login-cancel" class="flex-1 py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400 transition duration-200">Cancelar</button>
+                    <button type="submit" class="flex-1 py-2 bg-maiane-pink text-white font-bold rounded-lg hover:bg-maiane-dark-pink transition duration-200">Entrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bibliotecas do Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, query, where, addDoc, onSnapshot, serverTimestamp, setLogLevel, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Variáveis Globais (Fornecidas pelo ambiente)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Configurações e Instâncias
+        let app, db, auth, userId = null;
+        let selectedService = null;
+        let selectedDate = null;
+        let selectedTime = null;
+
+        // ADMIN CONFIG
+        const ADMIN_PASSWORD = '123';
+        let isAdminLoggedIn = false;
+
+        // Telefone da Maiane para o WhatsApp
+        const MAIANE_WHATSAPP_NUMBER = '71982755194'; 
+
+        // Dados Fixos de Exemplo (Serviços da Maiane Manicure)
+        const SERVICES = [
+            // Agora com numericPrice para cálculo de faturamento
+            { id: 'pe', name: 'Pé', duration: 45, price: 'R$ 30.00', numericPrice: 30.00, description: 'Esmaltação e tratamento dos pés (cerca de 45 minutos).' },
+            { id: 'mao', name: 'Mão', duration: 45, price: 'R$ 30.00', numericPrice: 30.00, description: 'Esmaltação e tratamento das mãos (cerca de 45 minutos).' },
+            { id: 'unha_postica', name: 'Unha Postiça', duration: 90, price: 'R$ 40.00', numericPrice: 40.00, description: 'Aplicação e esmaltação de unha postiça (cerca de 90 minutos).' },
+            { id: 'combo', name: 'Combo Pé e Mão', duration: 90, price: 'R$ 50.00', numericPrice: 50.00, description: 'Serviço completo de esmaltação e tratamento para pés e mãos (cerca de 90 minutos).' }
+        ];
+
+        // Mapeamento rápido de ID do serviço para o preço numérico
+        const SERVICE_PRICE_MAP = SERVICES.reduce((map, service) => {
+            map[service.id] = service.numericPrice;
+            return map;
+        }, {});
+
+
+        // Horários disponíveis para um dia típico
+        const AVAILABLE_TIMES = [
+            '08:30', '10:10',
+            '13:00', '14:40', '16:20'
+        ];
+
+        // Formatação de Moeda
+        const formatter = new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+        });
+        const formatCurrency = (value) => formatter.format(value);
+
+        /**
+         * FUNÇÕES DE UTILIDADE E FIREBASE
+         */
+
+        async function setupFirebase() {
+            try {
+                setLogLevel('debug');
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                    } else {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    }
+                    if (userId) {
+                         document.getElementById('user-info').textContent = `ID do Usuário: ${userId} (Use este ID para gerenciar seus agendamentos)`;
+                        renderApp();
+                        listenForAppointments();
+                    }
+                });
+
+            } catch (error) {
+                console.error("Erro ao inicializar Firebase:", error);
+                document.getElementById('loading').innerHTML = `<p class="text-red-500">Erro ao carregar o sistema de agendamento. Verifique o console.</p>`;
+            }
+        }
+
+        function getAppointmentsCollectionRef() {
+            return collection(db, `artifacts/${appId}/public/data/appointments`);
+        }
+
+        /**
+         * LÓGICA DE ADMINISTRAÇÃO E AUTENTICAÇÃO
+         */
+        
+        function showAdminLogin() {
+            document.getElementById('admin-login-modal').classList.remove('hidden');
+            document.getElementById('admin-password').focus();
+        }
+
+        function hideAdminLogin() {
+            document.getElementById('admin-login-modal').classList.add('hidden');
+            document.getElementById('admin-password').value = '';
+            document.getElementById('admin-login-message').classList.add('hidden');
+        }
+
+        document.getElementById('admin-panel-toggle').addEventListener('click', showAdminLogin);
+        document.getElementById('admin-login-cancel').addEventListener('click', hideAdminLogin);
+
+        document.getElementById('admin-login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const passwordInput = document.getElementById('admin-password').value;
+            const messageEl = document.getElementById('admin-login-message');
+
+            if (passwordInput === ADMIN_PASSWORD) {
+                isAdminLoggedIn = true;
+                hideAdminLogin();
+                renderAdminDashboard();
+                listenForAllAppointments();
+            } else {
+                messageEl.textContent = "Senha incorreta. Tente novamente.";
+                messageEl.classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('admin-logout').addEventListener('click', () => {
+            isAdminLoggedIn = false;
+            document.getElementById('admin-dashboard').classList.add('hidden');
+            document.getElementById('booking-flow').classList.remove('hidden');
+        });
+
+
+        /**
+         * LÓGICA DE RENDERIZAÇÃO E ESTADO
+         */
+
+        function renderApp() {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('booking-flow').classList.remove('hidden');
+            renderServices();
+            setupDateInput();
+        }
+        
+        function renderAdminDashboard() {
+            document.getElementById('booking-flow').classList.add('hidden');
+            document.getElementById('admin-dashboard').classList.remove('hidden');
+        }
+
+        // RENDERIZAÇÃO DE SERVIÇOS
+        function renderServices() {
+            const listEl = document.getElementById('service-list');
+            listEl.innerHTML = SERVICES.map(service => `
+                <button
+                    id="service-${service.id}"
+                    data-service-id="${service.id}"
+                    class="service-card p-4 border-2 border-gray-300 rounded-xl text-left transition duration-200 hover:border-maiane-pink hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-maiane-pink/50 bg-white"
+                >
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-bold text-lg text-gray-900">${service.name}</h3>
+                            <p class="text-sm font-semibold text-maiane-dark-pink mt-1">${service.price}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">${service.duration} min</span>
+                        </div>
+                    </div>
+                </button>
+            `).join('');
+
+            document.querySelectorAll('.service-card').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const id = e.currentTarget.dataset.serviceId;
+                    handleServiceSelection(id);
+                });
+            });
+        }
+
+        function handleServiceSelection(id) {
+            const service = SERVICES.find(s => s.id === id);
+            const descEl = document.getElementById('service-description-display');
+            
+            if (service) {
+                selectedService = service;
+                
+                document.querySelectorAll('.service-card').forEach(btn => {
+                    btn.classList.remove('ring-4', 'ring-maiane-pink', 'shadow-inner', 'border-maiane-dark-pink', 'bg-maiane-pink/10');
+                    btn.classList.add('bg-white', 'border-gray-300');
+                    if (btn.dataset.serviceId === id) {
+                        btn.classList.add('ring-4', 'ring-maiane-pink/50', 'shadow-inner', 'border-maiane-dark-pink', 'bg-maiane-pink/10');
+                        btn.classList.remove('bg-white');
+                    }
+                });
+
+                descEl.textContent = `Detalhes: ${service.description}`;
+                descEl.classList.remove('opacity-0', 'hidden');
+                descEl.classList.add('opacity-100');
+
+
+                document.getElementById('date-time-section').style.display = 'block';
+                selectedDate = null;
+                selectedTime = null;
+                document.getElementById('booking-date').value = '';
+                renderTimeSlots();
+                checkFormCompletion();
+            }
+        }
+
+        function setupDateInput() {
+            const dateInput = document.getElementById('booking-date');
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            const minDate = tomorrow.toISOString().split('T')[0];
+            dateInput.setAttribute('min', minDate);
+
+            dateInput.addEventListener('change', (e) => {
+                selectedDate = e.target.value;
+                selectedTime = null;
+                document.getElementById('client-info-section').style.display = 'none';
+                renderTimeSlots();
+                checkFormCompletion();
+            });
+        }
+
+        function renderTimeSlots() {
+            const slotsEl = document.getElementById('time-slots');
+            slotsEl.innerHTML = '';
+            slotsEl.classList.remove('grid-cols-1');
+
+            if (!selectedDate) {
+                slotsEl.innerHTML = `<p class="col-span-3 text-sm text-gray-500" id="time-placeholder">Selecione uma data para ver os horários.</p>`;
+                document.getElementById('client-info-section').style.display = 'none';
+                return;
+            }
+
+            AVAILABLE_TIMES.forEach(time => {
+                const button = document.createElement('button');
+                button.textContent = time;
+                button.dataset.time = time;
+                button.classList.add('time-slot-btn', 'p-2', 'border', 'border-gray-300', 'rounded-lg', 'text-sm', 'font-medium', 'hover:bg-maiane-pink/30', 'transition', 'duration-150', 'bg-white', 'shadow-sm');
+                
+                button.addEventListener('click', () => handleTimeSelection(time, button));
+                slotsEl.appendChild(button);
+            });
+            
+            document.getElementById('client-info-section').style.display = 'block';
+        }
+
+        function handleTimeSelection(time, buttonEl) {
+            selectedTime = time;
+            
+            document.querySelectorAll('.time-slot-btn').forEach(btn => {
+                btn.classList.remove('bg-maiane-pink', 'text-white', 'border-maiane-dark-pink', 'shadow-md');
+                btn.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
+            });
+
+            buttonEl.classList.add('bg-maiane-pink', 'text-white', 'border-maiane-dark-pink', 'shadow-md');
+            buttonEl.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
+
+            checkFormCompletion();
+        }
+
+        function checkFormCompletion() {
+            const bookButton = document.getElementById('book-button');
+            const name = document.getElementById('client-name').value;
+            const contact = document.getElementById('client-contact').value;
+
+            const isReady = selectedService && selectedDate && selectedTime && name && contact;
+            bookButton.disabled = !isReady;
+            bookButton.textContent = isReady ? 'Confirmar Agendamento e Abrir WhatsApp' : 'Preencha todos os campos';
+        }
+
+        /**
+         * LÓGICA DE AÇÕES (CANCELAR/CONCLUIR)
+         */
+        
+        async function updateAppointmentStatus(docId, status, buttonEl) {
+            if (!db || !docId) return;
+
+            const originalText = buttonEl.textContent;
+            buttonEl.textContent = 'Atualizando...';
+            buttonEl.disabled = true;
+
+            try {
+                const docRef = doc(db, `artifacts/${appId}/public/data/appointments`, docId);
+                
+                const updateData = { status: status };
+                
+                if (status === 'Cancelado') {
+                     updateData.cancellationTimestamp = serverTimestamp();
+                } else if (status === 'Concluído') {
+                    updateData.completionTimestamp = serverTimestamp(); 
+                }
+
+                await updateDoc(docRef, updateData);
+                console.log(`Agendamento ${docId} atualizado para status: ${status}.`);
+            } catch (error) {
+                console.error(`Erro ao atualizar agendamento para ${status}:`, error);
+                if (isAdminLoggedIn) {
+                    buttonEl.textContent = originalText;
+                    buttonEl.disabled = false;
+                }
+            }
+        }
+
+        async function cancelAppointment(docId, buttonEl) {
+            await updateAppointmentStatus(docId, 'Cancelado', buttonEl);
+        }
+
+        function rescheduleAppointment(details) {
+            const whatsappMessage = encodeURIComponent(
+                `Olá Maiane, gostaria de *REAGENDAR* o meu serviço de "${details.service}". O agendamento atual era para ${details.date} às ${details.time}. 
+Por favor, me informe as novas datas e horários disponíveis.
+(Lembre-se que o agendamento original será cancelado para darmos lugar a uma nova reserva.)`
+            );
+            const whatsappUrl = `https://wa.me/${MAIANE_WHATSAPP_NUMBER}?text=${whatsappMessage}`;
+            window.open(whatsappUrl, '_blank');
+        }
+
+
+        /**
+         * LÓGICA DE FORMULÁRIO E FIREBASE
+         */
+
+        document.getElementById('booking-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const name = document.getElementById('client-name').value.trim();
+            const contact = document.getElementById('client-contact').value.trim();
+            const formMessage = document.getElementById('form-message');
+            const bookButton = document.getElementById('book-button');
+
+            if (!selectedService || !selectedDate || !selectedTime || !name || !contact) {
+                formMessage.textContent = "Por favor, selecione o serviço, a data, o horário e preencha suas informações.";
+                formMessage.classList.add('text-red-500');
+                return;
+            }
+
+            bookButton.disabled = true;
+            bookButton.textContent = 'Agendando no Firestore...';
+            formMessage.textContent = '';
+            formMessage.classList.remove('text-red-500', 'text-green-500');
+
+            try {
+                const appointmentData = {
+                    userId: userId,
+                    serviceId: selectedService.id,
+                    serviceName: selectedService.name,
+                    clientName: name,
+                    clientContact: contact,
+                    date: selectedDate, // Formato YYYY-MM-DD
+                    time: selectedTime, // Formato HH:MM
+                    timestamp: serverTimestamp(),
+                    status: 'Pendente'
+                };
+
+                await addDoc(getAppointmentsCollectionRef(), appointmentData);
+                
+                const dateObj = new Date(selectedDate + 'T00:00:00'); 
+                const dateDisplayFull = dateObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+                const finalDateDisplay = `o dia ${dateDisplayFull.replace('de ', '')}`; 
+                
+                let timePeriod = '';
+                const hour = parseInt(selectedTime.split(':')[0], 10);
+                if (hour >= 6 && hour < 12) timePeriod = 'da manhã';
+                else if (hour >= 12 && hour < 18) timePeriod = 'da tarde';
+                else timePeriod = 'da noite';
+                
+                const whatsappMessage = encodeURIComponent(
+                    `*NOVO AGENDAMENTO - MAIANE MANICURE*
+
+Serviço: ${selectedService.name}
+Preço: ${selectedService.price}
+Duração Estimada: ${selectedService.duration} minutos
+
+Data: ${finalDateDisplay}
+Hora: ${selectedTime} ${timePeriod}
+
+Cliente: ${name}
+Contato: ${contact}`
+                );
+
+                const whatsappUrl = `https://wa.me/${MAIANE_WHATSAPP_NUMBER}?text=${whatsappMessage}`;
+
+                formMessage.textContent = `Sucesso! Agendamento de "${selectedService.name}" confirmado. Você será redirecionado para o WhatsApp de Maiane Manicure.`;
+                formMessage.classList.add('text-green-500');
+
+                setTimeout(() => {
+                    window.open(whatsappUrl, '_blank');
+                }, 1000); 
+
+                document.getElementById('client-name').value = '';
+                document.getElementById('client-contact').value = '';
+                selectedService = null;
+                selectedDate = null;
+                selectedTime = null;
+                document.getElementById('service-description-display').classList.add('opacity-0', 'hidden');
+
+                renderApp();
+
+            } catch (error) {
+                console.error("Erro ao salvar o agendamento no Firestore:", error);
+                formMessage.textContent = "Ocorreu um erro ao agendar. Tente novamente.";
+                formMessage.classList.add('text-red-500');
+            } finally {
+                bookButton.disabled = false;
+                bookButton.textContent = 'Confirmar Agendamento e Abrir WhatsApp';
+            }
+        });
+
+        document.getElementById('client-name').addEventListener('input', checkFormCompletion);
+        document.getElementById('client-contact').addEventListener('input', checkFormCompletion);
+
+        /**
+         * LISTENER DE AGENDAMENTOS (CLIENTE)
+         */
+
+        function listenForAppointments() {
+            const q = query(
+                getAppointmentsCollectionRef(),
+                where("userId", "==", userId)
+            );
+
+            onSnapshot(q, (snapshot) => {
+                const listEl = document.getElementById('appointments-list');
+                listEl.innerHTML = '';
+                
+                if (snapshot.empty) {
+                    listEl.innerHTML = '<p class="text-gray-500">Você ainda não tem agendamentos pendentes.</p>';
+                    return;
+                }
+
+                snapshot.docs.forEach(doc => {
+                    const data = doc.data();
+                    const dateObj = new Date(data.date + 'T00:00:00'); 
+                    const dateDisplay = dateObj.toLocaleDateString('pt-BR', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+
+                    const isCanceled = data.status === 'Cancelado';
+                    const isPending = data.status === 'Pendente';
+                    const isCompleted = data.status === 'Concluído';
+
+                    const item = document.createElement('div');
+                    item.classList.add('p-3', 'border', 'border-gray-200', 'rounded-lg', 'bg-white', 'shadow-sm', 'flex', 'justify-between', 'items-center');
+                    if (isCanceled || isCompleted) {
+                        item.classList.add('opacity-60');
+                    }
+                    
+                    let statusClass = 'bg-gray-500';
+                    if (isPending) statusClass = 'bg-orange-500';
+                    if (isCanceled) statusClass = 'bg-red-500';
+                    if (isCompleted) statusClass = 'bg-green-500';
+
+                    item.innerHTML = `
+                        <div>
+                            <p class="font-bold text-gray-800">${data.serviceName}</p>
+                            <p class="text-sm text-gray-600">
+                                <span class="font-semibold text-maiane-dark-pink">${dateDisplay}</span> às <span class="font-semibold text-maiane-dark-pink">${data.time}</span>
+                            </p>
+                            <p class="text-xs text-gray-500">Cliente: ${data.clientName} | Contato: ${data.clientContact}</p>
+                        </div>
+                        <div class="flex flex-col space-y-1 items-end">
+                            <span class="text-xs font-semibold px-2 py-1 rounded-full text-white ${statusClass}">
+                                ${data.status}
+                            </span>
+                            ${isPending ? `
+                                <div class="flex flex-col space-y-1 mt-1 text-right">
+                                    <button data-id="${doc.id}" data-action="cancel" class="action-btn-cancel text-xs font-medium text-red-600 hover:text-red-800 transition duration-150 p-1 rounded hover:bg-red-50 leading-none">Cancelar</button>
+                                    <button data-id="${doc.id}" data-action="reschedule" data-details='${JSON.stringify({service: data.serviceName, date: dateDisplay, time: data.time})}' class="action-btn-reschedule text-xs font-medium text-blue-600 hover:text-blue-800 transition duration-150 p-1 rounded hover:bg-blue-50 leading-none">Reagendar</button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                    listEl.appendChild(item);
+                });
+                
+                listEl.querySelectorAll('.action-btn-cancel').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const docId = e.currentTarget.dataset.id;
+                        cancelAppointment(docId, e.currentTarget);
+                    });
+                });
+
+                listEl.querySelectorAll('.action-btn-reschedule').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const details = JSON.parse(e.currentTarget.dataset.details);
+                        rescheduleAppointment(details);
+                    });
+                });
+
+            }, (error) => {
+                console.error("Erro ao ouvir agendamentos:", error);
+                document.getElementById('appointments-list').innerHTML = '<p class="text-red-500">Erro ao carregar sua lista de agendamentos.</p>';
+            });
+        }
+        
+        /**
+         * LISTENER PARA TODOS OS AGENDAMENTOS (ADMIN) E LÓGICA DE RELATÓRIO
+         */
+
+        function listenForAllAppointments() {
+            if (!db) return;
+
+            const q = query(getAppointmentsCollectionRef());
+
+            onSnapshot(q, (snapshot) => {
+                if (!isAdminLoggedIn) return; // Não renderiza se o admin não estiver logado
+
+                const allAppointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                // 1. Renderiza a lista de agendamentos
+                renderAdminAppointmentsList(allAppointments);
+                
+                // 2. Filtra e calcula o relatório
+                const completedAppointments = allAppointments.filter(app => app.status === 'Concluído');
+                renderProfitReport(completedAppointments);
+                
+            }, (error) => {
+                console.error("Erro ao ouvir TODOS os agendamentos:", error);
+                if (isAdminLoggedIn) {
+                    document.getElementById('all-appointments-list').innerHTML = '<p class="text-red-500">Erro ao carregar lista de agendamentos (Admin).</p>';
+                }
+            });
+        }
+
+        // Função para calcular e renderizar o Relatório de Faturamento
+        function renderProfitReport(completedAppointments) {
+            const monthlyRevenue = {};
+            const annualRevenue = {};
+            let totalRevenue = 0;
+
+            completedAppointments.forEach(data => {
+                // A data está no formato YYYY-MM-DD
+                const appointmentDate = new Date(data.date + 'T00:00:00');
+                const year = appointmentDate.getFullYear();
+                const month = appointmentDate.getMonth(); // 0-11
+                const yearMonthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+                
+                const price = SERVICE_PRICE_MAP[data.serviceId] || 0;
+                if (price === 0) {
+                    console.warn(`Preço não encontrado para serviceId: ${data.serviceId}. Ignorando agendamento no relatório.`);
+                    return;
+                }
+                
+                totalRevenue += price;
+
+                // Cálculo Mensal
+                monthlyRevenue[yearMonthKey] = (monthlyRevenue[yearMonthKey] || 0) + price;
+
+                // Cálculo Anual
+                annualRevenue[year] = (annualRevenue[year] || 0) + price;
+            });
+            
+            const reportEl = document.getElementById('profit-report-section');
+            let html = `
+                <div class="report-content-to-print">
+                    <h3 class="text-2xl font-bold mb-4 text-maiane-dark-pink border-b pb-2">Relatório de Faturamento</h3>
+                    
+                    <!-- Destaque Total Histórico -->
+                    <div class="mb-6 p-4 bg-maiane-pink/20 rounded-lg border-2 border-maiane-pink/50">
+                        <p class="text-sm font-semibold text-maiane-dark-pink">Total de Receita Histórica (Concluídos)</p>
+                        <p class="text-3xl font-extrabold text-maiane-dark-pink">${formatCurrency(totalRevenue)}</p>
+                    </div>
+
+                    <!-- Faturamento Anual (Visão Geral) -->
+                    <h4 class="text-lg font-bold mt-6 mb-3 text-gray-800">Faturamento Anual:</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${Object.keys(annualRevenue).sort().reverse().map(year => `
+                            <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                                <p class="text-base font-semibold text-gray-600">Ano ${year}</p>
+                                <p class="text-xl font-bold text-green-700">${formatCurrency(annualRevenue[year])}</p>
+                            </div>
+                        `).join('')}
+                        ${Object.keys(annualRevenue).length === 0 ? '<p class="text-gray-500 col-span-2">Nenhuma receita registrada ainda (marque agendamentos como "Concluído").</p>' : ''}
+                    </div>
+
+                    <!-- Faturamento Mensal (Detalhe) -->
+                    <h4 class="text-lg font-bold mt-8 mb-3 text-gray-800">Faturamento Mensal (Detalhado):</h4>
+                    <div class="space-y-2">
+                        ${Object.keys(monthlyRevenue).sort().reverse().map(yearMonth => {
+                            const [year, month] = yearMonth.split('-');
+                            const date = new Date(year, month - 1);
+                            const monthName = date.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+                            return `
+                                <div class="flex justify-between items-center p-3 bg-white rounded-lg border border-gray-100 shadow-sm">
+                                    <span class="font-medium text-gray-700">${monthName.charAt(0).toUpperCase() + monthName.slice(1)}:</span>
+                                    <span class="font-bold text-lg text-green-700">${formatCurrency(monthlyRevenue[yearMonth])}</span>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+
+                <div class="mt-6 print-hide">
+                    <button id="export-report-btn" class="w-full md:w-auto px-6 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition duration-150 shadow-lg transform hover:scale-[1.01]">
+                        Imprimir/Exportar Relatório (PDF)
+                    </button>
+                </div>
+            `;
+
+            reportEl.innerHTML = html;
+            
+            // Adiciona o listener do botão de exportação
+            const exportButton = document.getElementById('export-report-btn');
+            if (exportButton) {
+                exportButton.addEventListener('click', printReport);
+            }
+        }
+
+        // Função para renderizar a lista de agendamentos do Admin
+        function renderAdminAppointmentsList(allAppointments) {
+            const listEl = document.getElementById('all-appointments-list');
+            listEl.innerHTML = '';
+
+            if (allAppointments.length === 0) {
+                listEl.innerHTML = '<p class="text-gray-600">Nenhum agendamento encontrado.</p>';
+                return;
+            }
+
+            allAppointments.forEach(data => {
+                const docId = data.id;
+                const dateObj = new Date(data.date + 'T00:00:00');
+                const dateDisplay = dateObj.toLocaleDateString('pt-BR', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+
+                const isCanceled = data.status === 'Cancelado';
+                const isCompleted = data.status === 'Concluído';
+                const isPending = data.status === 'Pendente';
+                
+                let statusClass = 'bg-gray-500';
+                if (isPending) statusClass = 'bg-orange-500';
+                if (isCanceled) statusClass = 'bg-red-500';
+                if (isCompleted) statusClass = 'bg-green-500';
+
+                const item = document.createElement('div');
+                item.classList.add('p-4', 'border', 'border-gray-300', 'rounded-xl', 'bg-white', 'shadow-md', 'flex', 'flex-col', 'md:flex-row', 'justify-between', 'items-start', 'md:items-center', 'space-y-3', 'md:space-y-0');
+                
+                if (isCanceled || isCompleted) {
+                    item.classList.add('opacity-70');
+                }
+
+                item.innerHTML = `
+                    <div class="flex-1 w-full md:w-auto space-y-1">
+                        <p class="font-extrabold text-lg text-maiane-dark-pink">${data.serviceName} (${data.time})</p>
+                        <p class="text-sm text-gray-700">
+                            <span class="font-semibold">${dateDisplay}</span>
+                        </p>
+                        <p class="text-xs text-gray-500">Cliente: ${data.clientName} | Contato: ${data.clientContact}</p>
+                        <p class="text-xs text-gray-400">ID Cliente: ${data.userId}</p>
+                    </div>
+
+                    <div class="flex flex-col items-start md:items-end space-y-2 w-full md:w-auto print-hide">
+                        <span class="text-xs font-bold px-3 py-1 rounded-full text-white ${statusClass}">
+                            Status: ${data.status}
+                        </span>
+                        
+                        <div class="flex space-x-2">
+                            ${isPending ? `
+                                <button data-id="${docId}" data-status="Concluído" class="admin-action-btn px-3 py-1 text-xs font-semibold rounded-lg bg-green-500 text-white hover:bg-green-600 transition duration-150 transform hover:scale-105">Concluir</button>
+                                <button data-id="${docId}" data-status="Cancelado" class="admin-action-btn px-3 py-1 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition duration-150 transform hover:scale-105">Cancelar</button>
+                            ` : isCanceled ? `
+                                <p class="text-xs text-red-500 font-medium pt-1">Agendamento Cancelado</p>
+                            ` : isCompleted ? `
+                                <p class="text-xs text-green-700 font-medium pt-1">Serviço Concluído</p>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+                listEl.appendChild(item);
+            });
+            
+            listEl.querySelectorAll('.admin-action-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const docId = e.currentTarget.dataset.id;
+                    const newStatus = e.currentTarget.dataset.status;
+                    updateAppointmentStatus(docId, newStatus, e.currentTarget);
+                });
+            });
+        }
+        
+        // Função para Imprimir/Exportar para PDF
+        function printReport() {
+            window.print();
+        }
+
+        // Inicia o setup
+        setupFirebase();
+
+    </script>
+</body>
+</html>
